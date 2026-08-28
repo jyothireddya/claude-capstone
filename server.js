@@ -1,9 +1,6 @@
 const http = require('node:http');
-const crypto = require('node:crypto');
 
-const SESSION_COOKIE = 'session';
 const MAX_BODY_SIZE = 10_000;
-const DEFAULT_SESSION_LIFETIME_MS = 15 * 60 * 1000;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function escapeHtml(value) {
@@ -15,22 +12,7 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
-function parseCookies(request) {
-  const cookies = {};
-  for (const part of (request.headers.cookie || '').split(';').filter(Boolean)) {
-    const separator = part.indexOf('=');
-    if (separator < 0) continue;
-    const name = part.slice(0, separator).trim();
-    try {
-      cookies[name] = decodeURIComponent(part.slice(separator + 1).trim());
-    } catch {
-      // A malformed cookie is treated as absent.
-    }
-  }
-  return cookies;
-}
-
-function readForm(request) {
+function readBody(request) {
   return new Promise((resolve, reject) => {
     let body = '';
     let settled = false;
@@ -47,7 +29,7 @@ function readForm(request) {
       }
     });
     request.on('end', () => {
-      if (!settled) resolve(new URLSearchParams(body));
+      if (!settled) resolve(body);
     });
     request.on('error', (error) => {
       if (!settled) reject(error);
@@ -63,25 +45,24 @@ function createCredentialValidator(credentials) {
   };
 }
 
-function loginPage(message = '', email = '') {
-  const error = message ? `<p role="alert">${escapeHtml(message)}</p>` : '';
+function loginPage() {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Log in</title></head>
-<body><main><h1>Log in</h1>${error}
+<body><main><h1>Log in</h1>
 <form method="post" action="/login">
-<label for="email">Email</label><input id="email" name="email" type="email" value="${escapeHtml(email)}" required>
+<label for="email">Email</label><input id="email" name="email" type="email" required>
 <label for="password">Password</label><input id="password" name="password" type="password" required>
 <button type="submit">Log in</button></form></main></body></html>`;
 }
 
-function sendHtml(response, statusCode, body, headers = {}) {
-  response.writeHead(statusCode, { 'Content-Type': 'text/html; charset=utf-8', ...headers });
+function sendHtml(response, statusCode, body) {
+  response.writeHead(statusCode, { 'Content-Type': 'text/html; charset=utf-8' });
   response.end(body);
 }
 
-function redirect(response, location, headers = {}) {
-  response.writeHead(303, { Location: location, ...headers });
-  response.end();
+function sendJson(response, statusCode, body) {
+  response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.end(JSON.stringify(body));
 }
 
 function createLoginServer(options = {}) {
@@ -93,99 +74,61 @@ function createLoginServer(options = {}) {
     throw new Error('LOGIN_EMAIL and LOGIN_PASSWORD must be set');
   }
 
-  const sessionLifetimeMs = options.sessionLifetimeMs || DEFAULT_SESSION_LIFETIME_MS;
-  const secureCookies = options.secureCookies === true;
   const validator = options.credentialValidator || createCredentialValidator(credentials);
-  const sessions = new Map();
 
-  function cleanupExpiredSessions(now = Date.now()) {
-    for (const [sessionId, session] of sessions) {
-      if (session.expiresAt <= now) sessions.delete(sessionId);
-    }
-  }
-
-  function sessionCookie(value, maxAgeSeconds = Math.max(1, Math.floor(sessionLifetimeMs / 1000))) {
-    const attributes = [
-      `${SESSION_COOKIE}=${encodeURIComponent(value)}`,
-      'HttpOnly',
-      'SameSite=Lax',
-      'Path=/',
-      `Max-Age=${maxAgeSeconds}`
-    ];
-    if (secureCookies) attributes.push('Secure');
-    return attributes.join('; ');
-  }
-
-  const cleanupTimer = setInterval(cleanupExpiredSessions, sessionLifetimeMs);
-  cleanupTimer.unref();
   const server = http.createServer(async (request, response) => {
-    cleanupExpiredSessions();
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
-    const cookies = parseCookies(request);
-    const storedSession = cookies[SESSION_COOKIE] && sessions.get(cookies[SESSION_COOKIE]);
-    const session = storedSession && storedSession.expiresAt > Date.now() ? storedSession : undefined;
-    if (storedSession && !session) sessions.delete(cookies[SESSION_COOKIE]);
-
-    if (url.pathname === '/login' && request.method !== 'POST') {
-      response.setHeader('Allow', 'POST');
-      return sendHtml(response, 405, 'Method Not Allowed');
-    }
-
-    if (url.pathname === '/logout' && request.method !== 'POST') {
-      response.setHeader('Allow', 'POST');
-      return sendHtml(response, 405, 'Method Not Allowed');
-    }
 
     if (request.method === 'GET' && url.pathname === '/') {
-      return session ? redirect(response, '/account') : sendHtml(response, 200, loginPage());
+      return sendHtml(response, 200, loginPage());
     }
 
     if (request.method === 'POST' && url.pathname === '/login') {
       const contentType = (request.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
-      if (contentType !== 'application/x-www-form-urlencoded') {
-        return sendHtml(response, 415, 'Unsupported Media Type');
+
+      if (contentType !== 'application/x-www-form-urlencoded' && contentType !== 'application/json') {
+        return sendJson(response, 415, { error: 'Invalid email or password' });
       }
+
       if (Number(request.headers['content-length']) > MAX_BODY_SIZE) {
-        return sendHtml(response, 413, 'Request Entity Too Large');
+        return sendJson(response, 413, { error: 'Invalid email or password' });
       }
-      let form;
+
+      let email, password;
       try {
-        form = await readForm(request);
+        const rawBody = await readBody(request);
+        if (contentType === 'application/json') {
+          let parsed;
+          try {
+            parsed = JSON.parse(rawBody);
+          } catch {
+            return sendJson(response, 400, { error: 'Invalid email or password' });
+          }
+          email = (typeof parsed?.email === 'string' ? parsed.email : '').trim();
+          password = typeof parsed?.password === 'string' ? parsed.password : '';
+        } else {
+          const form = new URLSearchParams(rawBody);
+          email = (form.get('email') || '').trim();
+          password = form.get('password') || '';
+        }
       } catch (error) {
-        return sendHtml(response, error.code === 'BODY_TOO_LARGE' ? 413 : 400, loginPage('Invalid request.'));
+        return sendJson(response, error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: 'Invalid email or password' });
       }
-      const email = form.get('email')?.trim() || '';
-      const password = form.get('password') || '';
+
       if (!email || !password || !emailPattern.test(email)) {
-        return sendHtml(response, 400, loginPage('Enter a valid email and password.', email));
+        return sendJson(response, 400, { error: 'Invalid email or password' });
       }
+
       if (!await validator.validate({ email, password })) {
-        return sendHtml(response, 401, loginPage('Invalid email or password.', email));
+        return sendJson(response, 401, { error: 'Invalid email or password' });
       }
-      const sessionId = crypto.randomUUID();
-      sessions.set(sessionId, { email, expiresAt: Date.now() + sessionLifetimeMs });
-      return redirect(response, '/account', {
-        'Set-Cookie': sessionCookie(sessionId)
-      });
-    }
 
-    if (request.method === 'GET' && url.pathname === '/account') {
-      return session
-        ? sendHtml(response, 200, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Account</title></head><body><main><h1>Account</h1><p>Signed in as ${escapeHtml(session.email)}</p><form method="post" action="/logout"><button type="submit">Log out</button></form></main></body></html>`)
-        : redirect(response, '/');
-    }
-
-    if (request.method === 'POST' && url.pathname === '/logout') {
-      if (cookies[SESSION_COOKIE]) sessions.delete(cookies[SESSION_COOKIE]);
-      return redirect(response, '/', {
-        'Set-Cookie': sessionCookie('', 0)
-      });
+      return sendJson(response, 200, { message: 'Login successful' });
     }
 
     sendHtml(response, 404, 'Not Found');
   });
 
-  server.on('close', () => clearInterval(cleanupTimer));
   return server;
 }
 

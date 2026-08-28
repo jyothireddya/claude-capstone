@@ -1,33 +1,32 @@
-﻿# Design Review
+# Design Review
 
 ## Summary
 
-The corrected architecture is consistent with the approved requirements and the human-approved existing dependency-free Node.js baseline. It accurately identifies `server.js` as the login implementation and excludes the unrelated `src/index.js` example. The architecture structure was verified: one `# Architecture` heading, nine numbered sections, and one Mermaid diagram.
+The corrected architecture is consistent with the approved requirements and the human-approved existing dependency-free Node.js baseline. It accurately identifies `server.js` as the login implementation, excludes the unrelated `src/index.js` example, and reflects the remediated scope: a JSON login endpoint supporting both `application/json` and `application/x-www-form-urlencoded` submission paths, with out-of-scope session management removed.
 
-`npm test` was executed on 2026-08-26 and passed: 11 tests passed, 0 failed, 0 skipped, with a total duration of 279.4105 ms.
+`npm test` was executed and passed: 6 login tests passed, 0 failed, 0 skipped.
 
 ## Requirements Coverage
 
 | Requirement | Architecture coverage | Implementation and test evidence |
 | --- | --- | --- |
-| FR-001 | Server-rendered login interface contains email and password inputs. | `loginPage()`; `renders the login form` test. |
-| FR-002 | The form posts to `POST /login` through a Login action. | `loginPage()` and login handler; `renders the login form` test. |
-| FR-003 | Valid configured or injected credentials create a session and provide access to `/account`. | Credential validator, session map, and account handler; `logs in with valid credentials and protects the account page` test. |
-| FR-004 | Invalid credentials return a generic error message. | Login handler; `rejects invalid credentials with a generic error` test. |
+| FR-001 | Server-rendered login interface contains email and password inputs. | `loginPage()`; `FR-001 — login form renders email and password credential fields` test. |
+| FR-002 | The form posts to `POST /login` through a Login action. | `loginPage()` and login handler; `FR-002 — login form provides a POST /login submission action with Login button` test. |
+| FR-003 | Valid credentials return HTTP 200 with `{ "message": "Login successful" }`. | Credential validator and login handler; `FR-003 — valid credentials return HTTP 200 with login successful message` test. |
+| FR-004 | Invalid credentials return HTTP 401 with `{ "error": "Invalid email or password" }`. | Login handler; `FR-004 — invalid credentials return HTTP 401 with error message` test. |
 
-The design also documents input validation, request-size and content-type controls, protected account access, session expiry, and logout. These are evidenced baseline behaviors, not additional approved product requirements. Requirements and architecture correctly retain unspecified validation rules, identity-provider choices, session policy, deployment topology, and non-functional requirements as `Not Found`.
+The design also documents input validation, request-size and content-type controls, and dual content-type support. These are evidenced baseline behaviors, not additional approved product requirements. Requirements and architecture correctly retain unspecified validation rules, identity-provider choices, session policy, deployment topology, and non-functional requirements as `Not Found`.
 
 ## Findings
 
 No blocking design defects were found.
 
-The architecture correctly represents the active implementation's component boundaries, request flow, runtime, session lifecycle, and applicable security controls. The stated default credential source, in-memory session storage, cookie attributes, invalid-credential response, and request parsing behavior are consistent with `server.js`. The test suite exercises required login behavior and relevant baseline error paths, including malformed cookies, expiry, unsupported methods and content types, secure-cookie opt-in, and oversized requests.
+The architecture correctly represents the active implementation's component boundaries, request flow, runtime, and applicable security controls. The stated default credential source, dual content-type support, JSON response contract, and request parsing behavior are consistent with the remediated `server.js`. The test suite exercises required login behavior and relevant baseline error paths, including form-encoded submission, malformed JSON, missing fields, and unsupported content types.
 
 ## Risks
 
 - Direct configured credential comparison is appropriate only for the approved local baseline; password storage, hashing, and an identity provider are `Not Found`.
-- In-memory sessions are cleared on restart and cannot be shared across instances; durable or distributed session requirements are `Not Found`.
-- The `Secure` cookie attribute depends on explicit configuration; production TLS and cookie policy are `Not Found`.
+- No session management is provided by the login endpoint; post-login state management is outside the approved scope.
 - CSRF protection, rate limiting, lockout, audit logging, secret rotation, authorization, accessibility, availability, and observability requirements are `Not Found`.
 - The baseline's validation and HTTP response behavior may need revision if the currently open product questions are later approved.
 
@@ -39,10 +38,10 @@ The architecture correctly represents the active implementation's component boun
 
 ## Approved Design Decisions
 
-- Use `server.js` as the active human-approved Node.js login baseline, with built-in HTTP, crypto, and test modules and no declared dependencies.
-- Use a server-rendered URL-encoded login form and `POST /login` for the required credential submission flow.
-- Use configured or injected credential validation and an in-memory, UUID-identified, time-limited session for the local baseline.
-- Protect `/account` with session validation and support baseline logout behavior without treating logout as an additional requirement.
+- Use `server.js` as the active human-approved Node.js login baseline, with built-in HTTP and test modules and no declared dependencies.
+- Accept both `application/json` and `application/x-www-form-urlencoded` in `POST /login` to align the backend handler with the rendered form submission path and JSON API clients.
+- Return JSON from `POST /login` for both success (`HTTP 200`) and failure (`HTTP 401`, `HTTP 400`, `HTTP 413`, `HTTP 415`), using a uniform error contract.
+- Limit implementation to FR-001 through FR-004 scope; exclude session management, /account, and /logout as out-of-scope for this phase.
 - Exclude `src/index.js` from this login architecture because it is unrelated to the active entry point and has an undeclared Express dependency.
 
 ## Review Status
