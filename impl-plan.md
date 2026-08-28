@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The human-approved Node.js login baseline is already implemented in `server.js` and its active behavior is covered by the focused tests in `test/server.test.js`. On 2026-08-26, `npm test` passed all 11 tests. This plan therefore does not propose a second login implementation, new dependencies, external authentication, persistence, or production security features.
+The human-approved Node.js login baseline is already implemented in `server.js` and its active behavior is covered by the focused tests in `test/server.test.js`. On 2026-08-26, `npm test` passed all 11 tests. As of the current documentation sync, the test suite has been expanded to 23 login-specific tests (24 total including the unrelated placeholder in `src/tests/app.test.js`). This plan therefore does not propose a second login implementation, new dependencies, external authentication, persistence, or production security features.
 
 The work is limited to reconciling verified implementation evidence with the approved requirements and architecture, strengthening narrowly useful regression coverage, and synchronizing the SDLC documentation. All requirements that remain `Not Found` stay out of scope.
 
@@ -60,7 +60,7 @@ IP-002 is a conditional task: it produces an application-code change only when v
 
 ## 4. Testing Strategy
 
-Run `npm test` as the baseline and post-change verification command. Keep tests in `test/server.test.js` focused on the active `server.js` service.
+Run `npm test` as the baseline and post-change verification command. Keep tests in `test/server.test.js` focused on the active `server.js` service. The suite currently contains 23 login tests covering FR-001 through FR-004, JSON and form-encoded edge cases, routing behavior, content-type negotiation, body-size limits, and server construction validation.
 
 - Preserve evidence for the four approved outcomes: credential entry, Login action, valid login with account access, and invalid-login error.
 - Add regression assertions for the rendered form's `POST /login` submission semantics and for non-redisplay of a submitted password after an invalid login.

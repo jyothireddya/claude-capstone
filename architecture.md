@@ -48,6 +48,7 @@ No external authentication service, database, API, or deployment topology is evi
 | Tests | Built-in `node:test` and `node:assert` via `npm test` |
 | Dependencies | None declared |
 | Credential source | `LOGIN_EMAIL` and `LOGIN_PASSWORD` environment variables, or test options |
+| Containerization | Docker; `node:20-alpine` base image, working directory `/app`, port 3000 exposed, production entry via `npm start` |
 
 ## 6. Data Flow
 
@@ -60,7 +61,7 @@ No external authentication service, database, API, or deployment topology is evi
 
 ## 7. Security
 
-Evidenced controls are environment-configured default credentials, generic invalid-credential responses, HTML escaping, controlled error responses for all failure paths, and uniform error messaging that does not distinguish between missing credentials and invalid credentials.
+Evidenced controls are environment-configured default credentials, generic invalid-credential responses, controlled error responses for all failure paths, and uniform error messaging that does not distinguish between missing credentials and invalid credentials. `loginPage()` renders static HTML with no user-controlled content, so no runtime HTML escaping is required. (The `escapeHtml` helper previously present in `server.js` was dead code and has been removed.)
 
 TLS/deployment configuration, password hashing or an identity provider, session management, CSRF protection, rate limiting, lockout, audit logging, secret rotation, and account authorization are `Not Found` in the approved requirements.
 

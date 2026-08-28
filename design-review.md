@@ -4,7 +4,7 @@
 
 The corrected architecture is consistent with the approved requirements and the human-approved existing dependency-free Node.js baseline. It accurately identifies `server.js` as the login implementation, excludes the unrelated `src/index.js` example, and reflects the remediated scope: a JSON login endpoint supporting both `application/json` and `application/x-www-form-urlencoded` submission paths, with out-of-scope session management removed.
 
-`npm test` was executed and passed: 6 login tests passed, 0 failed, 0 skipped.
+`npm test` was executed and passed: 23 login tests passed, 0 failed, 0 skipped. 24 tests total including 1 unrelated placeholder test in `src/tests/app.test.js`.
 
 ## Requirements Coverage
 
@@ -22,6 +22,12 @@ The design also documents input validation, request-size and content-type contro
 No blocking design defects were found.
 
 The architecture correctly represents the active implementation's component boundaries, request flow, runtime, and applicable security controls. The stated default credential source, dual content-type support, JSON response contract, and request parsing behavior are consistent with the remediated `server.js`. The test suite exercises required login behavior and relevant baseline error paths, including form-encoded submission, malformed JSON, missing fields, and unsupported content types.
+
+Post-sync observations (informational, no design defects):
+
+- The `escapeHtml` helper was dead code in `server.js` and has been removed. `loginPage()` is static HTML with no user-controlled content; no runtime escaping was needed. Architecture section 7 has been updated accordingly.
+- The test suite has been expanded from 6 to 23 login-specific tests covering additional JSON and form-encoded edge cases, routing, content-type handling, and server construction. This strengthens regression coverage without changing the approved design.
+- A `Dockerfile` based on `node:20-alpine` has been added to the repository. It exposes port 3000 and uses `npm start` as the entry point. This is consistent with the approved baseline. TLS, secrets injection, and orchestration remain outside the approved scope.
 
 ## Risks
 
