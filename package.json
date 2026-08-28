@@ -1,0 +1,14 @@
+{
+  "name": "automated-documentation-sync-login",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal dependency-free login server for the capstone project",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
