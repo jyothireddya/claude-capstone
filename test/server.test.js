@@ -80,32 +80,239 @@ test('form-encoded submission path is accepted and returns HTTP 200 for valid cr
   assert.equal(body.message, 'Login successful');
 });
 
-// Malformed and incomplete input handling coverage
-test('malformed and incomplete input returns a controlled invalid-credentials response', async (t) => {
+// JSON — missing password field
+test('POST /login JSON missing password field returns 400', async (t) => {
   const running = await runningServer();
   t.after(() => running.server.close());
-
-  // Missing password field in JSON body
-  const missingPassword = await request(running.baseUrl, '/login', {
+  const response = await request(running.baseUrl, '/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'user@example.com' })
   });
-  assert.equal(missingPassword.status, 400);
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
 
-  // Malformed JSON body
-  const malformedJson = await request(running.baseUrl, '/login', {
+// JSON — missing email field
+test('POST /login JSON missing email field returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// JSON — malformed body
+test('POST /login JSON malformed body returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: 'not-valid-json'
   });
-  assert.equal(malformedJson.status, 400);
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
 
-  // Unsupported content type
-  const unsupported = await request(running.baseUrl, '/login', {
+// JSON — invalid email format (fails regex)
+test('POST /login JSON invalid email format returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'not-an-email', password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// JSON — whitespace-only email trimmed to empty
+test('POST /login JSON whitespace-only email returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: '   ', password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// JSON — whitespace-only password: server does not trim passwords, so it reaches
+// credential validation and returns 401 (wrong credentials)
+test('POST /login JSON whitespace-only password returns 401', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'user@example.com', password: '   ' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 401);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// JSON — wrong email returns 401
+test('POST /login JSON wrong email returns 401', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'other@example.com', password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 401);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// JSON — unsupported content type returns 415
+test('POST /login unsupported content type returns 415', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: 'email=user@example.com&password=correct-password'
   });
-  assert.equal(unsupported.status, 415);
+  const body = await response.json();
+  assert.equal(response.status, 415);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Body stream exceeds 10000 bytes returns 413
+test('POST /login rejects when streamed body exceeds 10000 bytes', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const largeBody = JSON.stringify({ email: 'user@example.com', password: 'x'.repeat(10000) });
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: largeBody
+  });
+  const body = await response.json();
+  assert.equal(response.status, 413);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Form-encoded — wrong password returns 401
+test('POST /login form-encoded wrong password returns 401', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    body: new URLSearchParams({ email: 'user@example.com', password: 'wrong-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 401);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Form-encoded — missing email returns 400
+test('POST /login form-encoded missing email returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    body: new URLSearchParams({ password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Form-encoded — missing password returns 400
+test('POST /login form-encoded missing password returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    body: new URLSearchParams({ email: 'user@example.com' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Form-encoded — invalid email format returns 400
+test('POST /login form-encoded invalid email format returns 400', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    body: new URLSearchParams({ email: 'not-an-email', password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error, 'Invalid email or password');
+});
+
+// Routing — unknown route returns 404
+test('GET /unknown route returns 404', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/nonexistent');
+  assert.equal(response.status, 404);
+  assert.match(response.headers.get('content-type'), /text\/html/);
+});
+
+// Routing — wrong method returns 404
+test('PUT /login returns 404', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', { method: 'PUT' });
+  assert.equal(response.status, 404);
+});
+
+// Server construction — missing credentials throws
+test('createLoginServer throws when credentials are not provided', () => {
+  const originalEmail = process.env.LOGIN_EMAIL;
+  const originalPassword = process.env.LOGIN_PASSWORD;
+  delete process.env.LOGIN_EMAIL;
+  delete process.env.LOGIN_PASSWORD;
+  try {
+    assert.throws(
+      () => createLoginServer(),
+      { message: 'LOGIN_EMAIL and LOGIN_PASSWORD must be set' }
+    );
+  } finally {
+    if (originalEmail !== undefined) process.env.LOGIN_EMAIL = originalEmail;
+    if (originalPassword !== undefined) process.env.LOGIN_PASSWORD = originalPassword;
+  }
+});
+
+// Content-Type with charset parameter is accepted
+test('POST /login accepts application/json with charset parameter', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ email: 'user@example.com', password: 'correct-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.message, 'Login successful');
+});
+
+// GET / Content-Type is text/html
+test('GET / response Content-Type is text/html', async (t) => {
+  const running = await runningServer();
+  t.after(() => running.server.close());
+  const response = await request(running.baseUrl, '/');
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/html/);
 });
