@@ -3,15 +3,6 @@ const http = require('node:http');
 const MAX_BODY_SIZE = 10_000;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let body = '';
