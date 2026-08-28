@@ -10,7 +10,7 @@ The login form renders email and password fields and a POST /login action (FR-00
 
 ## Security
 
-HTML escaping is applied in `loginPage()`. Generic error responses do not distinguish between missing credentials and invalid credentials, preventing user-enumeration. No session identifiers, cookies, or authentication tokens are issued by the login endpoint. No credentials, passwords, or secrets are present in source code or tests.
+`loginPage()` renders static HTML with no dynamic user-controlled content, eliminating the reflected-XSS attack surface. Generic error responses do not distinguish between missing credentials and invalid credentials, preventing user-enumeration. No session identifiers, cookies, or authentication tokens are issued by the login endpoint. No credentials, passwords, or secrets are present in source code or tests.
 
 ## Error Handling
 
@@ -28,7 +28,7 @@ Controlled JSON responses cover: malformed JSON body, incomplete payload (missin
 
 ## Code Quality
 
-The login server is dependency-free, small, and uses focused helpers (`escapeHtml`, `readBody`, `loginPage`, `sendHtml`, `sendJson`, `createCredentialValidator`). Out-of-scope logic (session management, /account, /logout) has been removed.
+The login server is dependency-free, small, and uses focused helpers (`readBody`, `loginPage`, `sendHtml`, `sendJson`, `createCredentialValidator`). Out-of-scope logic (session management, /account, /logout) has been removed.
 
 ## Findings
 
